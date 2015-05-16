@@ -1,0 +1,197 @@
+#! /bin/bash
+#
+# COPYRIGHT:
+# (c) 2008 Lourenco Alves Pereira Junior (GNU LGPL V2.1)
+# You may view the full copyright text at:
+# http://www.opensource.org/licenses/lgpl-license.html
+#
+# DESCRIPTION:
+# 	Parse the menu of the restaurant of the University of Sao Paulo at Sao
+#	Carlos and print the meal(s) to be served.
+#
+#	This is a BETA version.
+# 
+
+#LANG=pt_BR.UTF-8
+LANG=pt_BR.ISO-8859-1
+
+MENU=http://www.pcasc.usp.br/restaurante.xml
+WEEKDAY=
+DATE=
+SED_FILTER=
+# SED="sed $SED_FILTER"
+
+function usage
+{
+	local BIN=$(basename $0)
+
+cat << EOF
+Usage: $BIN [OPTION]...
+OPTION:
+	-h	Show this message
+	-d	Day of the meal. Can be 'segunda', 'terca', 'quarta', 'quinta', 
+			'sexta' or 'sabado'. Default value: today.
+	-n	Day of the meal. Can be 1: 'segunda', 2: 'terca', 3: 'quarta', 
+			4: 'quinta', 5: 'sexta' or 6: 'sabado'. Default value: today.
+	-a	Print lunch (almoco)? Default value: yes.
+	-j	Print diner (jantar)? Default value: yes.
+Examples:
+	$BIN
+	$BIN -h
+	$BIN -d segunda
+	$BIN -d sabado
+	$BIN -d terca -a
+	$BIN -d quarta -j
+	$BIN -n 1 -a -j
+	$BIN -a
+	$BIN -j
+
+$BIN BETA version.
+EOF
+
+	exit 1
+}
+
+function filter
+{
+	SED_FILTER="s/.*<$1>\(.*\)<\/$1>.*/\1/g"
+	return
+}
+
+# Usage: get_meals $WEEKDAY
+function get_meals
+{
+	filter $1
+	WEEKDAY=$(curl $MENU 2> a.txt | tr -d '\n' | tr -d '\r' | sed $SED_FILTER)
+# 	echo -e $WEEKDAY
+	return
+}
+
+# Usage: print_date $WEEKDAY
+function print_date
+{
+	local date
+
+	filter data
+	date=$(echo $1 | sed $SED_FILTER)
+	echo -e 'Data: \t\t'$date
+	return
+}
+
+# Usage: print_meal $WEEKDAY $MEAL
+function print_meal
+{
+# 	echo 'print_meal 1: '$1
+# 	echo 'print_meal 2: '$2
+# 	return
+
+	local weekday_meals=$1
+	local meal=$2
+
+# 	echo 'print_meal weeday_meals: '$weekday_meals
+# 	echo 'print_meal meal: '$meal
+# 	return
+
+	local lunch salad main side_order dessert
+
+	filter $meal
+	lunch=$(echo $weekday_meals | sed $SED_FILTER)
+# 	echo -e $lunch
+# 	return
+	
+	filter salada
+	salad=$(echo $lunch | sed $SED_FILTER)
+	echo -e 'Salada: \t'$salad
+	
+	filter principal
+	main=$(echo $lunch | sed $SED_FILTER)
+	echo -e 'Principal: \t'$main
+	
+	filter acompanhamento
+	side_order=$(echo $lunch | sed $SED_FILTER)
+	echo -e 'Acompanhamento: '$side_order
+	
+	filter sobremesa
+	dessert=$(echo $lunch | sed $SED_FILTER)
+	echo -e 'Sobremesa: \t'$dessert
+
+	return
+}
+
+function check_parameters
+{
+	local weekdays=(domingo segunda terca quarta quinta sexta sabado)
+	DAY=${weekdays[$(date +%w)]}
+	PRINT_LUNCH=1
+	PRINT_DINER=1
+	while getopts "hd:n:aj" OPT
+	do
+		case $OPT in
+			h)
+				usage
+				;;
+			d)
+				DAY=$OPTARG
+				;;
+			n)
+				DAY=${weekdays[$OPTARG]}
+				;;
+			a)
+				PRINT_LUNCH=$(($PRINT_LUNCH + 1))
+				PRINT_DINER=$(($PRINT_DINER - 1))
+				;;
+			j)
+				PRINT_LUNCH=$(($PRINT_LUNCH - 1))
+				PRINT_DINER=$(($PRINT_DINER + 1))
+				;;
+			\?)
+				usage
+				;;			
+		esac
+	done
+}
+
+function main
+{
+	check_parameters $@
+
+	get_meals $DAY
+	print_date "$WEEKDAY"
+
+	if [ $PRINT_LUNCH -gt 0 ]
+	then
+		echo -e "\nAlmoco:"
+		print_meal "$WEEKDAY" almoco
+	fi
+
+	if [ $PRINT_DINER -gt 0 ]
+	then
+		echo -e "\nJantar:"
+		print_meal "$WEEKDAY" jantar
+	fi
+
+	echo -e "\n\nFor more options use:\n\t$(basename $0) -h"
+}
+
+function check_dependencies
+{
+	local c_curl=$(which curl)
+	#echo $c_curl
+	if [[ -z "$c_curl" ]]
+	then
+		cat << EOF
+Missing dependency: curl
+Try install it before using
+
+sudo apt-get install curl
+EOF
+		exit 1
+	fi
+}
+
+
+check_dependencies
+main $@
+
+# END OF FILE
+
